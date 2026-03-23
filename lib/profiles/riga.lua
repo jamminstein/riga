@@ -423,10 +423,128 @@ return {
       weight = 0.2,
       sensitivity = 0.2,
       direction = "both",
-      -- how aggressively the explorer mutates. rare shifts.
       range_lo = 0.1,
       range_hi = 0.9,
       euclidean_pulses = 3,
+    },
+
+    ---------- SYNTHESIS INTERNALS: BASSLINE (ch1) ----------
+    ch1_saw = {
+      group = "timbral", weight = 0.7, sensitivity = 0.6, direction = "both",
+      range_lo = 0, range_hi = 1, euclidean_pulses = 5,
+    },
+    ch1_pulse = {
+      group = "timbral", weight = 0.5, sensitivity = 0.5, direction = "both",
+      range_lo = 0, range_hi = 1, euclidean_pulses = 5,
+    },
+    ch1_sub = {
+      group = "timbral", weight = 0.6, sensitivity = 0.5, direction = "both",
+      -- sub oscillator: the transistor grunt of DB-01.
+      range_lo = 0, range_hi = 1, euclidean_pulses = 5,
+    },
+    ch1_noise = {
+      group = "timbral", weight = 0.35, sensitivity = 0.3, direction = "up",
+      range_lo = 0, range_hi = 0.5, euclidean_pulses = 3,
+    },
+    ch1_bbdDetune = {
+      group = "timbral", weight = 0.75, sensitivity = 0.6, direction = "both",
+      -- BBD bucket brigade detune: the Erica secret weapon.
+      -- chorus to massive poly-synth. robot should ride this.
+      range_lo = 0, range_hi = 0.7, euclidean_pulses = 7,
+    },
+    ch1_envMod = {
+      group = "timbral", weight = 0.8, sensitivity = 0.7, direction = "both",
+      -- filter envelope depth: the acid squelch control.
+      range_lo = 0, range_hi = 1, euclidean_pulses = 7,
+    },
+    ch1_pitchEnv = {
+      group = "timbral", weight = 0.5, sensitivity = 0.4, direction = "both",
+      -- pitch slide amount: subtle = groove, extreme = acid scream.
+      range_lo = 0, range_hi = 6, euclidean_pulses = 5,
+    },
+
+    ---------- SYNTHESIS INTERNALS: PERKONS (ch2) ----------
+    ch2_drumMode = {
+      group = "structural", weight = 0.15, sensitivity = 0.3, direction = "both",
+      -- kick/snare/hat morph. rare shifts for drama.
+      range_lo = 0, range_hi = 1, euclidean_pulses = 3,
+    },
+    ch2_fmIndex = {
+      group = "timbral", weight = 0.65, sensitivity = 0.5, direction = "both",
+      -- FM depth: clean to metallic. Perkons hybrid character.
+      range_lo = 0, range_hi = 5, euclidean_pulses = 5,
+    },
+    ch2_fmRatio = {
+      group = "timbral", weight = 0.45, sensitivity = 0.35, direction = "both",
+      -- integer = harmonic, non-integer = clangorous.
+      range_lo = 0.5, range_hi = 3.5, euclidean_pulses = 3,
+    },
+    ch2_noiseAmt = {
+      group = "timbral", weight = 0.55, sensitivity = 0.45, direction = "both",
+      range_lo = 0, range_hi = 0.8, euclidean_pulses = 5,
+    },
+    ch2_shape = {
+      group = "timbral", weight = 0.4, sensitivity = 0.35, direction = "both",
+      range_lo = 0, range_hi = 1, euclidean_pulses = 5,
+    },
+    ch2_pitchEnvAmt = {
+      group = "timbral", weight = 0.6, sensitivity = 0.5, direction = "both",
+      -- pitch sweep: defines kick punch vs tom vs laser.
+      range_lo = 0, range_hi = 10, euclidean_pulses = 5,
+    },
+
+    ---------- SYNTHESIS INTERNALS: STEAMPIPE (ch3) ----------
+    ch3_exciterNoise = {
+      group = "timbral", weight = 0.6, sensitivity = 0.5, direction = "both",
+      -- DC=pluck, noise=breath. the soul of physical modeling.
+      range_lo = 0, range_hi = 1, euclidean_pulses = 5,
+    },
+    ch3_feedback = {
+      group = "timbral", weight = 0.7, sensitivity = 0.4, direction = "both",
+      -- pipe resonance: short=pluck, long=sustained drone.
+      range_lo = 0.85, range_hi = 0.995, euclidean_pulses = 5,
+    },
+    ch3_brightness = {
+      group = "timbral", weight = 0.65, sensitivity = 0.55, direction = "both",
+      -- exciter brightness: dark thud to bright chime.
+      range_lo = 0, range_hi = 1, euclidean_pulses = 7,
+    },
+    ch3_splitPoint = {
+      group = "timbral", weight = 0.4, sensitivity = 0.3, direction = "both",
+      -- pipe splitting: creates inharmonic partials.
+      range_lo = 0.15, range_hi = 0.85, euclidean_pulses = 3,
+    },
+    ch3_splitMix = {
+      group = "timbral", weight = 0.45, sensitivity = 0.35, direction = "both",
+      range_lo = 0, range_hi = 0.8, euclidean_pulses = 5,
+    },
+
+    ---------- SYNTHESIS INTERNALS: SYNTRX (ch4) ----------
+    ch4_osc1Shape = {
+      group = "timbral", weight = 0.55, sensitivity = 0.45, direction = "both",
+      -- sine→pulse→saw→varssaw morphing.
+      range_lo = 0, range_hi = 1, euclidean_pulses = 5,
+    },
+    ch4_osc2Ratio = {
+      group = "timbral", weight = 0.5, sensitivity = 0.4, direction = "both",
+      -- frequency ratio: harmonic vs inharmonic intervals.
+      range_lo = 0.5, range_hi = 3.5, euclidean_pulses = 3,
+    },
+    ch4_ringMod = {
+      group = "timbral", weight = 0.6, sensitivity = 0.5, direction = "both",
+      -- ring modulator depth: the Syntrx signature.
+      range_lo = 0, range_hi = 0.8, euclidean_pulses = 5,
+    },
+    ch4_noiseLevel = {
+      group = "timbral", weight = 0.4, sensitivity = 0.35, direction = "up",
+      -- multi-color noise: adds texture and chaos.
+      range_lo = 0, range_hi = 0.5, euclidean_pulses = 3,
+    },
+    ch4_chaosAmt = {
+      group = "timbral", weight = 0.7, sensitivity = 0.6, direction = "both",
+      -- internal chaos modulation: the Syntrx joystick.
+      -- robot should push this for otherworldly moments.
+      range_lo = 0, range_hi = 0.8, euclidean_pulses = 7,
     },
   },
 }

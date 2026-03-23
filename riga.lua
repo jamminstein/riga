@@ -225,6 +225,49 @@ function init()
     params:set_action("ch" .. ch .. "_fxSend", function(v) voices[ch].fxSend = v end)
   end
 
+  -- expose synthesis extras as real params (so robot mod can modulate them)
+  -- BASSLINE extras (ch1 defaults)
+  params:add_separator("SYNTHESIS")
+  local synth_params = {
+    -- Bassline
+    {id="ch1_saw", name="1:saw", min=0, max=1, default=0.8},
+    {id="ch1_pulse", name="1:pulse", min=0, max=1, default=0},
+    {id="ch1_sub", name="1:sub", min=0, max=1, default=0.6},
+    {id="ch1_noise", name="1:noise", min=0, max=0.6, default=0},
+    {id="ch1_bbdDetune", name="1:bbd detune", min=0, max=0.8, default=0.2},
+    {id="ch1_envMod", name="1:env mod", min=0, max=1, default=0.7},
+    {id="ch1_pitchEnv", name="1:pitch env", min=0, max=8, default=2},
+    -- Perkons
+    {id="ch2_drumMode", name="2:drum mode", min=0, max=1, default=0},
+    {id="ch2_fmIndex", name="2:fm index", min=0, max=6, default=1.5},
+    {id="ch2_fmRatio", name="2:fm ratio", min=0.5, max=4, default=1.0},
+    {id="ch2_noiseAmt", name="2:noise", min=0, max=1, default=0.1},
+    {id="ch2_shape", name="2:shape", min=0, max=1, default=0},
+    {id="ch2_pitchEnvAmt", name="2:pitch env", min=0, max=12, default=6},
+    -- Steampipe
+    {id="ch3_exciterNoise", name="3:exciter", min=0, max=1, default=0.6},
+    {id="ch3_feedback", name="3:feedback", min=0.8, max=0.999, default=0.96},
+    {id="ch3_brightness", name="3:brightness", min=0, max=1, default=0.5},
+    {id="ch3_splitPoint", name="3:split", min=0.1, max=0.9, default=0.4},
+    {id="ch3_splitMix", name="3:split mix", min=0, max=1, default=0.3},
+    -- Syntrx
+    {id="ch4_osc1Shape", name="4:osc1 shape", min=0, max=1, default=0.3},
+    {id="ch4_osc2Ratio", name="4:osc2 ratio", min=0.5, max=4, default=1.5},
+    {id="ch4_ringMod", name="4:ring mod", min=0, max=1, default=0.2},
+    {id="ch4_noiseLevel", name="4:noise", min=0, max=0.6, default=0.15},
+    {id="ch4_chaosAmt", name="4:chaos", min=0, max=1, default=0.3},
+  }
+
+  for _, sp in ipairs(synth_params) do
+    local ch_num = tonumber(sp.id:sub(3, 3))
+    local extra_key = sp.id:sub(5)
+    params:add_control(sp.id, sp.name,
+      controlspec.new(sp.min, sp.max, 'lin', 0.01, sp.default))
+    params:set_action(sp.id, function(v)
+      voices[ch_num].extra[extra_key] = v
+    end)
+  end
+
   -- explorer params
   params:add_separator("EXPLORER")
   params:add_option("explorer_active", "explorer", {"off", "on"}, 1)
