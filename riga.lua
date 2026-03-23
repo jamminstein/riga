@@ -127,7 +127,8 @@ local fx = {
 -- page-specific param lists for encoder navigation
 local THUNDER_PARAMS = {"division", "shuffle", "shuffle_amt", "fill_type"}
 local VOICE_PARAMS = {"mode", "cutoff", "res", "drive", "decay", "amp", "fxSend", "filterMode"}
-local CHAOS_PARAMS = {"active", "rate", "intensity", "coeff_x", "coeff_y", "smooth", "loop_len"}
+local CHAOS_PARAMS = {"active", "intensity", "coeff_x", "coeff_y", "smooth", "loop_len"}
+local CHAOS_LABELS = {"ON/OFF", "DEPTH", "DNA-X", "DNA-Y", "SLEW", "LOOP"}
 local SPACE_PARAMS = {
   "bbd_time", "bbd_feedback", "bbd_color", "bbd_mix",
   "poli_cutoff", "poli_res", "poli_mode",
@@ -642,19 +643,20 @@ function enc(n, d)
     elseif page == 3 then -- CHAOS
       local p = CHAOS_PARAMS[sel_param]
       if p == "active" then
-        params:delta("chaos_active", d)
-      elseif p == "rate" then
-        params:delta("chaos_rate", d)
+        chaos.active = not chaos.active
+        params:set("chaos_active", chaos.active and 2 or 1)
       elseif p == "intensity" then
-        params:delta("chaos_intensity", d)
+        chaos.intensity = util.clamp(chaos.intensity + d * 0.03, 0, 1)
+        params:set("chaos_intensity", chaos.intensity)
       elseif p == "coeff_x" then
-        chaos.coeff_x = util.clamp(chaos.coeff_x + d * 0.05, 1, 4)
+        chaos.coeff_x = util.clamp(chaos.coeff_x + d * 0.05, 2.5, 4.0)
       elseif p == "coeff_y" then
         chaos.coeff_y = util.clamp(chaos.coeff_y + d * 0.05, 0.5, 3.5)
       elseif p == "smooth" then
         chaos.smooth_factor = util.clamp(chaos.smooth_factor + d * 0.05, 0, 1)
       elseif p == "loop_len" then
         chaos.loop_length = util.clamp(chaos.loop_length + d * 4, 0, 256)
+        if chaos.loop_length == 0 then chaos.loop_buffer = {} end
       end
     elseif page == 4 then -- SPACE
       local p = SPACE_PARAMS[sel_param]
@@ -1148,80 +1150,82 @@ function draw_voices()
 end
 
 function draw_chaos()
-  -- polynomial chaos visualization
-  -- 4 chaos outputs as waveform traces
+  -- XY phase space plot (the main visual — big and central)
+  local plot_x = 0
+  local plot_y = 11
+  local plot_w = 56
+  local plot_h = 40
 
-  screen.level(chaos.active and 10 or 3)
-  screen.move(0, 18)
-  screen.text("POLYNOMIAL CHAOS")
-
-  -- 4 output meters as vertical bars
-  local bar_w = 6
-  local bar_max = 30
-  for ch = 1, 4 do
-    local val = chaos:get(ch)
-    local h = math.floor(val * bar_max)
-    local x = 4 + (ch - 1) * 10
-
-    screen.level(chaos.active and 8 or 3)
-    screen.rect(x, 22 + bar_max - h, bar_w, h)
-    screen.fill()
-
-    screen.level(2)
-    screen.rect(x, 22, bar_w, bar_max)
-    screen.stroke()
-
-    -- channel label
-    screen.level(5)
-    screen.move(x + 2, 58)
-    screen.text(ch)
-  end
-
-  -- coefficients display
-  screen.level(10)
-  screen.move(50, 28)
-  screen.text("X: " .. string.format("%.2f", chaos.coeff_x))
-  screen.move(50, 38)
-  screen.text("Y: " .. string.format("%.2f", chaos.coeff_y))
-
-  -- XY plot (phase space)
-  local plot_x = 85
-  local plot_y = 22
-  local plot_w = 38
-  local plot_h = 30
-
-  screen.level(2)
+  -- plot border
+  screen.level(chaos.active and 4 or 2)
   screen.rect(plot_x, plot_y, plot_w, plot_h)
   screen.stroke()
 
-  -- plot chaos outputs as XY pairs
+  -- plot chaos outputs as XY pairs (2 dots bouncing in phase space)
   if chaos.active then
     for i = 1, 2 do
-      local cx = plot_x + chaos:get(i * 2 - 1) * plot_w
-      local cy = plot_y + chaos:get(i * 2) * plot_h
-      screen.level(i == 1 and 15 or 8)
+      local cx = plot_x + 2 + chaos:get(i * 2 - 1) * (plot_w - 4)
+      local cy = plot_y + 2 + chaos:get(i * 2) * (plot_h - 4)
+      screen.level(i == 1 and 15 or 7)
       screen.rect(cx - 1, cy - 1, 3, 3)
       screen.fill()
     end
+    -- 4 output bars along the bottom of the plot
+    for ch = 1, 4 do
+      local val = chaos:get(ch)
+      local bw = math.floor(val * 12)
+      screen.level(6)
+      screen.rect(plot_x + 2 + (ch - 1) * 14, plot_y + plot_h - 4, bw, 3)
+      screen.fill()
+    end
+  else
+    screen.level(3)
+    screen.move(plot_x + 12, plot_y + 22)
+    screen.text("(OFF)")
   end
 
-  -- loop indicator
-  if chaos.loop_length > 0 then
-    screen.level(6)
-    screen.move(50, 48)
-    screen.text("LOOP: " .. chaos.loop_length)
+  -- right column: all params with selection highlight
+  local rx = 62
+  for i, p in ipairs(CHAOS_PARAMS) do
+    local y = 12 + (i - 1) * 9
+    local is_sel = sel_param == i
+    local label = CHAOS_LABELS[i]
+    local val_str = ""
+
+    if p == "active" then
+      val_str = chaos.active and "ON" or "OFF"
+    elseif p == "intensity" then
+      val_str = string.format("%.0f%%", chaos.intensity * 100)
+    elseif p == "coeff_x" then
+      val_str = string.format("%.2f", chaos.coeff_x)
+    elseif p == "coeff_y" then
+      val_str = string.format("%.2f", chaos.coeff_y)
+    elseif p == "smooth" then
+      val_str = string.format("%.0f%%", chaos.smooth_factor * 100)
+    elseif p == "loop_len" then
+      val_str = chaos.loop_length == 0 and "FREE" or tostring(chaos.loop_length)
+    end
+
+    -- selection indicator
+    if is_sel then
+      screen.level(15)
+      screen.rect(rx - 2, y - 6, 68, 9)
+      screen.fill()
+      screen.level(0)
+    else
+      screen.level(6)
+    end
+
+    screen.move(rx, y)
+    screen.text(label)
+    screen.move(128, y)
+    screen.text_right(val_str)
   end
 
-  -- smooth
-  screen.level(5)
-  screen.move(50, 58)
-  screen.text("SLEW: " .. string.format("%.0f%%", chaos.smooth_factor * 100))
-
-  -- footer: selected param
-  screen.level(8)
+  -- footer: K3 gesture hint
+  screen.level(4)
   screen.move(0, 63)
-  local p = CHAOS_PARAMS[sel_param]
-  screen.text("E3:" .. p)
+  screen.text("K3:rewind+scramble")
 end
 
 function draw_space()
