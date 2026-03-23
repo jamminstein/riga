@@ -37,6 +37,7 @@ local Thunder = include "lib/thunder"
 local Chaos = include "lib/chaos"
 local Explorer = include "lib/explorer"
 local Bandmate = include "lib/bandmate"
+local Timbre = include "lib/timbre"
 
 ----------------------------------------------------------------
 -- state
@@ -46,13 +47,14 @@ local thunder = nil
 local chaos = nil
 local explorer = nil
 local bandmate = nil
+local timbre = nil
 local g = grid.connect()
 local midi_out = nil
 
 local playing = false
 local page = 1
-local NUM_PAGES = 5
-local PAGE_NAMES = {"THUNDER", "VOICES", "CHAOS", "SPACE", "BANDMATE"}
+local NUM_PAGES = 6
+local PAGE_NAMES = {"THUNDER", "VOICES", "TIMBRE", "CHAOS", "SPACE", "BANDMATE"}
 local sel_ch = 1
 local sel_param = 1
 
@@ -136,6 +138,15 @@ local SPACE_PARAMS = {
   "zen_size", "zen_mix",
 }
 local BANDMATE_PARAMS = {"active", "style", "intensity", "breathing", "form", "form_type", "phrase_len"}
+local TIMBRE_PARAMS = {"active", "mindset", "intensity"}
+
+-- page indices (TIMBRE inserted at 3, shifting others)
+local PG_THUNDER = 1
+local PG_VOICES = 2
+local PG_TIMBRE = 3
+local PG_CHAOS = 4
+local PG_SPACE = 5
+local PG_BANDMATE = 6
 
 ----------------------------------------------------------------
 -- init
@@ -146,6 +157,7 @@ function init()
   chaos = Chaos.new()
   explorer = Explorer.new(thunder, chaos)
   bandmate = Bandmate.new(thunder, chaos, explorer)
+  timbre = Timbre.new()
 
   -- apply voice presets
   for ch = 1, 4 do
@@ -247,6 +259,18 @@ function init()
 
   params:add_number("bandmate_phrase_len", "phrase length", 2, 16, 4)
   params:set_action("bandmate_phrase_len", function(v) bandmate.phrase_len = v end)
+
+  -- timbre engineer params
+  params:add_separator("TIMBRE ENGINEER")
+  params:add_option("timbre_active", "timbre engineer", {"off", "on"}, 1)
+  params:set_action("timbre_active", function(v) timbre.active = v == 2 end)
+
+  params:add_option("timbre_mindset", "mindset", Timbre.MINDSET_NAMES, 1)
+  params:set_action("timbre_mindset", function(v) timbre.mindset = v end)
+
+  params:add_control("timbre_intensity", "timbre intensity",
+    controlspec.new(0, 1, 'lin', 0.01, 0.5))
+  params:set_action("timbre_intensity", function(v) timbre.intensity = v end)
 
   -- chaos params
   params:add_separator("CHAOS")
@@ -387,6 +411,12 @@ function step_clock()
     if playing then
       -- advance chaos
       chaos:step()
+
+      -- advance timbre engineer
+      local timbre_changes = timbre:step(voices)
+      for _, tc in ipairs(timbre_changes) do
+        voices[tc.ch].extra[tc.param] = tc.value
+      end
 
       -- advance bandmate
       local bm_changes = bandmate:step()
@@ -588,27 +618,33 @@ function enc(n, d)
     page = util.clamp(page + d, 1, NUM_PAGES)
     sel_param = 1
   elseif n == 2 then
-    if page == 1 then -- THUNDER
+    if page == PG_THUNDER then
       if key3_held then
         sel_param = util.clamp(sel_param + d, 1, #THUNDER_PARAMS)
       else
         sel_ch = util.clamp(sel_ch + d, 1, 4)
       end
-    elseif page == 2 then -- VOICES
+    elseif page == PG_VOICES then
       if key3_held then
         sel_param = util.clamp(sel_param + d, 1, #VOICE_PARAMS)
       else
         sel_ch = util.clamp(sel_ch + d, 1, 4)
       end
-    elseif page == 3 then -- CHAOS
+    elseif page == PG_TIMBRE then
+      if key3_held then
+        sel_param = util.clamp(sel_param + d, 1, #TIMBRE_PARAMS)
+      else
+        sel_ch = util.clamp(sel_ch + d, 1, 4)
+      end
+    elseif page == PG_CHAOS then
       sel_param = util.clamp(sel_param + d, 1, #CHAOS_PARAMS)
-    elseif page == 4 then -- SPACE
+    elseif page == PG_SPACE then
       sel_param = util.clamp(sel_param + d, 1, #SPACE_PARAMS)
-    elseif page == 5 then -- BANDMATE
+    elseif page == PG_BANDMATE then
       sel_param = util.clamp(sel_param + d, 1, #BANDMATE_PARAMS)
     end
   elseif n == 3 then
-    if page == 1 then -- THUNDER
+    if page == PG_THUNDER then
       local p = THUNDER_PARAMS[sel_param]
       if p == "division" then
         params:delta("division", d)
@@ -619,7 +655,7 @@ function enc(n, d)
       elseif p == "fill_type" then
         thunder.fill_type = util.clamp(thunder.fill_type + d, 1, 4)
       end
-    elseif page == 2 then -- VOICES
+    elseif page == PG_VOICES then
       local p = VOICE_PARAMS[sel_param]
       local ch = sel_ch
       if p == "mode" then
@@ -639,7 +675,19 @@ function enc(n, d)
       elseif p == "filterMode" then
         voices[ch].filterMode = util.clamp(voices[ch].filterMode + d, 0, 2)
       end
-    elseif page == 3 then -- CHAOS
+    elseif page == PG_TIMBRE then
+      local p = TIMBRE_PARAMS[sel_param]
+      if p == "active" then
+        timbre.active = not timbre.active
+        params:set("timbre_active", timbre.active and 2 or 1)
+      elseif p == "mindset" then
+        timbre.mindset = util.clamp(timbre.mindset + d, 1, #Timbre.MINDSET_NAMES)
+        params:set("timbre_mindset", timbre.mindset)
+      elseif p == "intensity" then
+        timbre.intensity = util.clamp(timbre.intensity + d * 0.03, 0, 1)
+        params:set("timbre_intensity", timbre.intensity)
+      end
+    elseif page == PG_CHAOS then
       local p = CHAOS_PARAMS[sel_param]
       if p == "active" then
         chaos.active = not chaos.active
@@ -657,10 +705,10 @@ function enc(n, d)
         chaos.loop_length = util.clamp(chaos.loop_length + d * 4, 0, 256)
         if chaos.loop_length == 0 then chaos.loop_buffer = {} end
       end
-    elseif page == 4 then -- SPACE
+    elseif page == PG_SPACE then
       local p = SPACE_PARAMS[sel_param]
       if p then params:delta(p, d) end
-    elseif page == 5 then -- BANDMATE
+    elseif page == PG_BANDMATE then
       local p = BANDMATE_PARAMS[sel_param]
       if p == "active" then
         params:delta("bandmate_active", d)
@@ -713,13 +761,13 @@ function key(n, z)
         gesture_active = true
         gesture_timer = 8
 
-        if page == 1 then
+        if page == PG_THUNDER then
           -- THUNDER GESTURE: all-channel fill burst
           for ch = 1, 4 do
             thunder.channels[ch].fill_active = true
             table.insert(fill_release_timers, {ch = ch, delay = 16})
           end
-        elseif page == 2 then
+        elseif page == PG_VOICES then
           -- VOICES GESTURE: randomize all voice timbres within musical range
           for ch = 1, 4 do
             voices[ch].cutoff = 200 + math.random() * 6000
@@ -727,12 +775,21 @@ function key(n, z)
             voices[ch].drive = math.random() * 0.7
             voices[ch].decay = 0.05 + math.random() * 1.5
           end
-        elseif page == 3 then
+        elseif page == PG_TIMBRE then
+          -- TIMBRE GESTURE: scramble all voice extras to random values
+          for ch = 1, 4 do
+            local mp = timbre:get_mode_params(voices[ch].mode)
+            for _, p in ipairs(mp) do
+              local new_val = p.min + math.random() * (p.max - p.min)
+              voices[ch].extra[p.name] = new_val
+            end
+          end
+        elseif page == PG_CHAOS then
           -- CHAOS GESTURE: rewind + scramble coefficients
           chaos:rewind()
           chaos:drift(0.5)
           chaos.smooth_factor = math.random()
-        elseif page == 4 then
+        elseif page == PG_SPACE then
           -- SPACE GESTURE: FX blast (max feedback + reverb, auto-decays)
           fx.bbd_feedback = 0.88
           fx.zen_mix = 0.7
@@ -741,7 +798,7 @@ function key(n, z)
           engine.zen_mix(fx.zen_mix)
           engine.zen_size(fx.zen_size)
           fx_blast_active = true
-        elseif page == 5 then
+        elseif page == PG_BANDMATE then
           -- BANDMATE GESTURE: force phrase boundary
           for ch = 1, 4 do
             thunder:mutate(ch, 0.25)
@@ -751,7 +808,7 @@ function key(n, z)
       end
     else
       -- K3 release
-      if page == 1 then
+      if page == PG_THUNDER then
         for ch = 1, 4 do
           thunder.channels[ch].fill_active = false
         end
@@ -1004,15 +1061,17 @@ function redraw()
   end
 
   -- page content
-  if page == 1 then
+  if page == PG_THUNDER then
     draw_thunder()
-  elseif page == 2 then
+  elseif page == PG_VOICES then
     draw_voices()
-  elseif page == 3 then
+  elseif page == PG_TIMBRE then
+    draw_timbre()
+  elseif page == PG_CHAOS then
     draw_chaos()
-  elseif page == 4 then
+  elseif page == PG_SPACE then
     draw_space()
-  elseif page == 5 then
+  elseif page == PG_BANDMATE then
     draw_bandmate()
   end
 
@@ -1149,6 +1208,83 @@ function draw_voices()
   screen.level(4)
   screen.move(128, 63)
   screen.text_right("K3+E2:param")
+end
+
+function draw_timbre()
+  -- timbre engineer visualization
+  -- shows all 4 voices with their mode-specific params as live bars
+
+  -- mindset name
+  screen.level(timbre.active and 15 or 4)
+  screen.move(0, 16)
+  screen.text(Timbre.MINDSET_NAMES[timbre.mindset])
+
+  -- intensity
+  screen.level(6)
+  screen.move(80, 16)
+  screen.text(string.format("%.0f%%", timbre.intensity * 100))
+
+  -- active indicator
+  screen.level(timbre.active and 10 or 3)
+  screen.move(110, 16)
+  screen.text(timbre.active and "ON" or "OFF")
+
+  -- 4 voices, each showing their mode-specific params as horizontal bars
+  local y_start = 20
+  local row_h = 10
+
+  for ch = 1, 4 do
+    local v = voices[ch]
+    local y = y_start + (ch - 1) * row_h
+    local is_sel = sel_ch == ch
+    local mp = timbre:get_mode_params(v.mode)
+
+    -- voice label
+    screen.level(is_sel and 15 or 5)
+    screen.move(0, y + 7)
+    screen.text(ch)
+
+    -- mode abbreviation
+    screen.level(is_sel and 10 or 3)
+    screen.move(6, y + 7)
+    screen.text(MODE_NAMES[v.mode + 1]:sub(1, 3))
+
+    -- param bars (up to 7 params, scaled to fit)
+    local num_p = math.min(#mp, 9)
+    local bar_w = math.floor(100 / math.max(num_p, 1))
+
+    for pi = 1, num_p do
+      local p = mp[pi]
+      local val = v.extra[p.name] or p.default
+      local norm = (val - p.min) / math.max(0.001, p.max - p.min)
+      norm = util.clamp(norm, 0, 1)
+
+      local bx = 24 + (pi - 1) * bar_w
+      local bh = math.floor(norm * (row_h - 2))
+
+      -- bar fill
+      local focus = timbre:get_focus()
+      local is_focused = timbre.active and focus[ch] == pi
+      screen.level(is_focused and 15 or (is_sel and 7 or 4))
+      screen.rect(bx, y + row_h - 1 - bh, bar_w - 1, bh)
+      screen.fill()
+
+      -- tension indicator for PROVOCATEUR
+      if timbre.mindset == 3 and timbre.active then
+        local t = timbre:get_tension()
+        if t[ch] > 0.5 then
+          screen.level(math.floor(t[ch] * 12))
+          screen.rect(bx, y, bar_w - 1, 1)
+          screen.fill()
+        end
+      end
+    end
+  end
+
+  -- footer
+  screen.level(8)
+  screen.move(0, 63)
+  screen.text("E2:voice K3+E2:param E3:" .. TIMBRE_PARAMS[sel_param])
 end
 
 function draw_chaos()
