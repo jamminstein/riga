@@ -9,21 +9,26 @@
 --
 -- 4 voices: BASSLINE / PERKONS / STEAMPIPE / SYNTRX
 -- autonomous rhythm, polynomial chaos, phase evolution
+-- bandmate: 8 performance styles with breathing + song form
 --
--- E1: page (thunder/voices/chaos/space)
+-- E1: page (thunder/voices/chaos/space/bandmate)
 -- E2: select channel or param
 -- E3: adjust value
 -- K2: play/stop
--- K3: performance action (hold)
---     thunder: trigger fill
---     voices: mute/unmute selected
---     chaos: rewind sequence
---     space: freeze FX
+-- K3 tap: GESTURE (musical event per page)
+--     thunder: all-channel fill burst
+--     voices: randomize voices within musical range
+--     chaos: rewind + scramble coefficients
+--     space: FX blast (feedback+reverb swell, auto-decay)
+--     bandmate: force phrase boundary (new pattern)
+-- K3 hold + E2: select channel
+-- K3 hold + E3: secondary param
+-- K2+K3: toggle bandmate
 --
--- grid top 4 rows: step sequencer (16 × 4)
--- grid row 5-6: voice select + mutes
--- grid row 7: chaos amount per voice
--- grid row 8: pattern/performance
+-- grid top 4 rows: step sequencer (16 x 4)
+-- grid row 5-6: voice select + mutes + performance
+-- grid row 7: chaos intensity bar
+-- grid row 8: play + shuffle + fill + bandmate
 
 engine.name = "Riga"
 
@@ -31,6 +36,7 @@ local musicutil = require "musicutil"
 local Thunder = include "lib/thunder"
 local Chaos = include "lib/chaos"
 local Explorer = include "lib/explorer"
+local Bandmate = include "lib/bandmate"
 
 ----------------------------------------------------------------
 -- state
@@ -39,13 +45,14 @@ local Explorer = include "lib/explorer"
 local thunder = nil
 local chaos = nil
 local explorer = nil
+local bandmate = nil
 local g = grid.connect()
 local midi_out = nil
 
 local playing = false
 local page = 1
-local NUM_PAGES = 4
-local PAGE_NAMES = {"THUNDER", "VOICES", "CHAOS", "SPACE"}
+local NUM_PAGES = 5
+local PAGE_NAMES = {"THUNDER", "VOICES", "CHAOS", "SPACE", "BANDMATE"}
 local sel_ch = 1
 local sel_param = 1
 
@@ -53,8 +60,12 @@ local screen_dirty = true
 local grid_dirty = true
 
 local key3_held = false
+local key2_held = false
 local grid_held = nil
 local fill_release_timers = {}
+local gesture_active = false   -- K3 gesture animation
+local gesture_timer = 0
+local fx_blast_active = false  -- FX blast auto-decay
 
 local active_notes = {{}, {}, {}, {}}
 
@@ -123,6 +134,7 @@ local SPACE_PARAMS = {
   "plasma_drive", "plasma_fold", "plasma_mix",
   "zen_size", "zen_mix",
 }
+local BANDMATE_PARAMS = {"active", "style", "intensity", "breathing", "form", "form_type", "phrase_len"}
 
 ----------------------------------------------------------------
 -- init
@@ -132,6 +144,7 @@ function init()
   thunder = Thunder.new()
   chaos = Chaos.new()
   explorer = Explorer.new(thunder, chaos)
+  bandmate = Bandmate.new(thunder, chaos, explorer)
 
   -- apply voice presets
   for ch = 1, 4 do
@@ -210,6 +223,29 @@ function init()
 
   params:add_number("explorer_phase_len", "phase length", 32, 512, 128)
   params:set_action("explorer_phase_len", function(v) explorer.phase_length = v end)
+
+  -- bandmate params
+  params:add_separator("BANDMATE")
+  params:add_option("bandmate_active", "bandmate", {"off", "on"}, 1)
+  params:set_action("bandmate_active", function(v) bandmate.active = v == 2 end)
+
+  params:add_option("bandmate_style", "style", Bandmate.STYLE_NAMES, 1)
+  params:set_action("bandmate_style", function(v) bandmate.style = v end)
+
+  params:add_number("bandmate_intensity", "intensity", 1, 10, 5)
+  params:set_action("bandmate_intensity", function(v) bandmate.intensity = v end)
+
+  params:add_option("bandmate_breathing", "breathing", {"off", "on"}, 2)
+  params:set_action("bandmate_breathing", function(v) bandmate.breathing = v == 2 end)
+
+  params:add_option("bandmate_form", "song form", {"off", "on"}, 1)
+  params:set_action("bandmate_form", function(v) bandmate.form_enabled = v == 2 end)
+
+  params:add_option("bandmate_form_type", "form type", bandmate.FORM_NAMES, 1)
+  params:set_action("bandmate_form_type", function(v) bandmate.form_type = v end)
+
+  params:add_number("bandmate_phrase_len", "phrase length", 2, 16, 4)
+  params:set_action("bandmate_phrase_len", function(v) bandmate.phrase_len = v end)
 
   -- chaos params
   params:add_separator("CHAOS")
@@ -351,9 +387,30 @@ function step_clock()
       -- advance chaos
       chaos:step()
 
+      -- advance bandmate
+      local bm_changes = bandmate:step()
+      apply_explorer_changes(bm_changes)
+
       -- advance explorer
       local changes = explorer:step()
       apply_explorer_changes(changes)
+
+      -- gesture animation decay
+      if gesture_active then
+        gesture_timer = gesture_timer - 1
+        if gesture_timer <= 0 then gesture_active = false end
+      end
+
+      -- FX blast auto-decay (returns FX to normal over 4 bars)
+      if fx_blast_active then
+        fx.bbd_feedback = util.clamp(fx.bbd_feedback - 0.008, 0, 0.95)
+        fx.zen_mix = util.clamp(fx.zen_mix - 0.005, 0, 1)
+        engine.bbd_feedback(fx.bbd_feedback)
+        engine.zen_mix(fx.zen_mix)
+        if fx.bbd_feedback < 0.4 and fx.zen_mix < 0.3 then
+          fx_blast_active = false
+        end
+      end
 
       -- advance thunder and trigger voices
       local results = thunder:advance()
@@ -547,6 +604,8 @@ function enc(n, d)
       sel_param = util.clamp(sel_param + d, 1, #CHAOS_PARAMS)
     elseif page == 4 then -- SPACE
       sel_param = util.clamp(sel_param + d, 1, #SPACE_PARAMS)
+    elseif page == 5 then -- BANDMATE
+      sel_param = util.clamp(sel_param + d, 1, #BANDMATE_PARAMS)
     end
   elseif n == 3 then
     if page == 1 then -- THUNDER
@@ -600,6 +659,23 @@ function enc(n, d)
     elseif page == 4 then -- SPACE
       local p = SPACE_PARAMS[sel_param]
       if p then params:delta(p, d) end
+    elseif page == 5 then -- BANDMATE
+      local p = BANDMATE_PARAMS[sel_param]
+      if p == "active" then
+        params:delta("bandmate_active", d)
+      elseif p == "style" then
+        params:delta("bandmate_style", d)
+      elseif p == "intensity" then
+        params:delta("bandmate_intensity", d)
+      elseif p == "breathing" then
+        params:delta("bandmate_breathing", d)
+      elseif p == "form" then
+        params:delta("bandmate_form", d)
+      elseif p == "form_type" then
+        params:delta("bandmate_form_type", d)
+      elseif p == "phrase_len" then
+        params:delta("bandmate_phrase_len", d)
+      end
     end
   end
   screen_dirty = true
@@ -610,30 +686,74 @@ end
 ----------------------------------------------------------------
 
 function key(n, z)
-  if n == 2 and z == 1 then
-    playing = not playing
-    if not playing then
-      all_notes_off()
+  if n == 2 then
+    key2_held = z == 1
+    if z == 1 then
+      -- K2+K3 combo: toggle bandmate
+      if key3_held then
+        bandmate.active = not bandmate.active
+        params:set("bandmate_active", bandmate.active and 2 or 1)
+      else
+        playing = not playing
+        if not playing then
+          all_notes_off()
+        end
+      end
     end
   elseif n == 3 then
     key3_held = z == 1
     if z == 1 then
-      -- performance actions per page
-      if page == 1 then
-        -- trigger fill on selected channel
-        thunder.channels[sel_ch].fill_active = true
-        table.insert(fill_release_timers, {ch = sel_ch, delay = 16})
-      elseif page == 2 then
-        -- mute/unmute selected channel
-        thunder.channels[sel_ch].muted = not thunder.channels[sel_ch].muted
-      elseif page == 3 then
-        -- rewind chaos
-        chaos:rewind()
+      -- K2+K3 combo: toggle bandmate
+      if key2_held then
+        bandmate.active = not bandmate.active
+        params:set("bandmate_active", bandmate.active and 2 or 1)
+      else
+        -- GESTURE: dramatic one-shot musical event per page
+        gesture_active = true
+        gesture_timer = 8
+
+        if page == 1 then
+          -- THUNDER GESTURE: all-channel fill burst
+          for ch = 1, 4 do
+            thunder.channels[ch].fill_active = true
+            table.insert(fill_release_timers, {ch = ch, delay = 16})
+          end
+        elseif page == 2 then
+          -- VOICES GESTURE: randomize all voice timbres within musical range
+          for ch = 1, 4 do
+            voices[ch].cutoff = 200 + math.random() * 6000
+            voices[ch].res = 0.1 + math.random() * 0.6
+            voices[ch].drive = math.random() * 0.7
+            voices[ch].decay = 0.05 + math.random() * 1.5
+          end
+        elseif page == 3 then
+          -- CHAOS GESTURE: rewind + scramble coefficients
+          chaos:rewind()
+          chaos:drift(0.5)
+          chaos.smooth_factor = math.random()
+        elseif page == 4 then
+          -- SPACE GESTURE: FX blast (max feedback + reverb, auto-decays)
+          fx.bbd_feedback = 0.88
+          fx.zen_mix = 0.7
+          fx.zen_size = 0.92
+          engine.bbd_feedback(fx.bbd_feedback)
+          engine.zen_mix(fx.zen_mix)
+          engine.zen_size(fx.zen_size)
+          fx_blast_active = true
+        elseif page == 5 then
+          -- BANDMATE GESTURE: force phrase boundary
+          for ch = 1, 4 do
+            thunder:mutate(ch, 0.25)
+          end
+          bandmate.home_state = nil  -- reset form home
+        end
       end
     else
+      -- K3 release
       if page == 1 then
-        -- release fill
-        thunder.channels[sel_ch].fill_active = false
+        for ch = 1, 4 do
+          thunder.channels[ch].fill_active = false
+        end
       end
     end
   end
@@ -706,16 +826,28 @@ function grid_key(x, y, z)
       chaos.intensity = x / 16
       params:set("chaos_intensity", chaos.intensity)
     elseif y == 8 then
-      -- bottom row: play/stop and performance
+      -- bottom row: play/stop, shuffle, bandmate, fill, global fill
       if x == 1 then
         playing = not playing
         if not playing then all_notes_off() end
       elseif x >= 3 and x <= 6 then
         -- shuffle type
         thunder.shuffle = x - 2
+      elseif x == 8 then
+        -- bandmate toggle
+        bandmate.active = not bandmate.active
+        params:set("bandmate_active", bandmate.active and 2 or 1)
       elseif x >= 9 and x <= 12 then
         -- fill type
         thunder.fill_type = x - 8
+      elseif x == 14 then
+        -- cycle bandmate style
+        bandmate.style = (bandmate.style % #Bandmate.STYLE_NAMES) + 1
+        params:set("bandmate_style", bandmate.style)
+      elseif x == 15 then
+        -- toggle song form
+        bandmate.form_enabled = not bandmate.form_enabled
+        params:set("bandmate_form", bandmate.form_enabled and 2 or 1)
       elseif x == 16 then
         -- global fill (all channels)
         thunder.fill_mode = true
@@ -801,14 +933,20 @@ function grid_redraw()
     g:led(x, 7, x <= chaos_level and 8 or 1)
   end
 
-  -- row 8: play + shuffle + fill type + global fill
+  -- row 8: play + shuffle + fill type + bandmate + global fill
   g:led(1, 8, playing and 15 or 4)
   for x = 3, 6 do
     g:led(x, 8, thunder.shuffle == (x - 2) and 12 or 3)
   end
+  -- bandmate toggle + style
+  g:led(8, 8, bandmate.active and 15 or 3)
   for x = 9, 12 do
     g:led(x, 8, thunder.fill_type == (x - 8) and 12 or 3)
   end
+  -- bandmate energy as brightness on 14-15
+  local bm_bright = math.floor(bandmate.energy * 12) + 2
+  g:led(14, 8, bandmate.active and bm_bright or 2)
+  g:led(15, 8, bandmate.active and math.floor(bm_bright * 0.7) or 2)
   g:led(16, 8, thunder.fill_mode and 15 or 5)
 
   g:refresh()
@@ -850,6 +988,20 @@ function redraw()
   screen.move(128, 7)
   screen.text_right(params:get("bpm") .. "")
 
+  -- gesture flash
+  if gesture_active then
+    screen.level(15)
+    screen.rect(0, 0, 128, 64)
+    screen.stroke()
+  end
+
+  -- bandmate indicator in header
+  if bandmate.active then
+    screen.level(bandmate.energy > 0.5 and 10 or 4)
+    screen.move(52, 7)
+    screen.text("~")
+  end
+
   -- page content
   if page == 1 then
     draw_thunder()
@@ -859,6 +1011,8 @@ function redraw()
     draw_chaos()
   elseif page == 4 then
     draw_space()
+  elseif page == 5 then
+    draw_bandmate()
   end
 
   screen.update()
@@ -1154,6 +1308,79 @@ function draw_space()
     end
     screen.text(sp:gsub("_"," ") .. ": " .. display)
   end
+end
+
+function draw_bandmate()
+  -- bandmate status
+  screen.level(bandmate.active and 15 or 4)
+  screen.move(0, 18)
+  screen.text("BANDMATE")
+
+  -- style name (large)
+  screen.level(bandmate.active and 15 or 5)
+  screen.move(0, 32)
+  screen.text(Bandmate.STYLE_NAMES[bandmate.style])
+
+  -- intensity bar
+  local int_w = math.floor(bandmate.intensity / 10 * 50)
+  screen.level(8)
+  screen.rect(70, 22, int_w, 8)
+  screen.fill()
+  screen.level(3)
+  screen.rect(70, 22, 50, 8)
+  screen.stroke()
+  screen.level(6)
+  screen.move(72, 29)
+  screen.text("INT:" .. bandmate.intensity)
+
+  -- breathing visualization
+  if bandmate.breathing then
+    local breath_w = math.floor(bandmate.energy * 40)
+    local breath_phase = bandmate:get_breath_phase()
+    screen.level(breath_phase == "silence" and 2 or (breath_phase == "build" and 10 or 7))
+    screen.rect(0, 38, breath_w, 5)
+    screen.fill()
+    screen.level(2)
+    screen.rect(0, 38, 40, 5)
+    screen.stroke()
+
+    screen.level(5)
+    screen.move(44, 43)
+    screen.text(breath_phase:upper())
+  end
+
+  -- song form
+  if bandmate.form_enabled then
+    screen.level(10)
+    screen.move(0, 52)
+    screen.text("FORM: " .. bandmate.FORM_NAMES[bandmate.form_type])
+    screen.level(7)
+    screen.move(80, 52)
+    screen.text(bandmate.form_phase:upper())
+  else
+    screen.level(3)
+    screen.move(0, 52)
+    screen.text("form: off")
+  end
+
+  -- voice activity for current style
+  screen.level(5)
+  screen.move(70, 43)
+  local v_active = bandmate.style_voices[bandmate.style]
+  for ch = 1, 4 do
+    screen.level(v_active[ch] and (thunder.channels[ch].muted and 4 or 10) or 2)
+    screen.rect(70 + (ch - 1) * 12, 36, 10, 7)
+    screen.fill()
+  end
+
+  -- footer
+  screen.level(8)
+  screen.move(0, 63)
+  local p = BANDMATE_PARAMS[sel_param]
+  screen.text("E3:" .. (p or ""))
+  screen.level(4)
+  screen.move(128, 63)
+  screen.text_right("K2+K3:toggle")
 end
 
 ----------------------------------------------------------------
