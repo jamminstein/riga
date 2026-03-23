@@ -768,10 +768,9 @@ function key(n, z)
         gesture_timer = 8
 
         if page == PG_THUNDER then
-          -- THUNDER GESTURE: all-channel fill burst
+          -- THUNDER GESTURE: regenerate all patterns
           for ch = 1, 4 do
-            thunder.channels[ch].fill_active = true
-            table.insert(fill_release_timers, {ch = ch, delay = 16})
+            thunder:randomize(ch, 0.3 + math.random() * 0.3)
           end
         elseif page == PG_VOICES then
           -- VOICES GESTURE: randomize all voice timbres within musical range
@@ -814,11 +813,7 @@ function key(n, z)
       end
     else
       -- K3 release
-      if page == PG_THUNDER then
-        for ch = 1, 4 do
-          thunder.channels[ch].fill_active = false
-        end
-      end
+      -- K3 release (no-op now, gestures are one-shot)
     end
   end
   screen_dirty = true
