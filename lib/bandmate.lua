@@ -32,7 +32,7 @@ function Bandmate.new(thunder, chaos, explorer)
   self.active = false
   self.style = 1
   self.intensity = 5       -- 1-10
-  self.step = 0
+  self.tick = 0
   self.bar = 0
   self.phrase_len = 4
 
@@ -87,10 +87,10 @@ end
 function Bandmate:step()
   if not self.active then return {} end
 
-  self.step = self.step + 1
+  self.tick = self.tick + 1
   self.pending = {}
   local int = self.intensity / 10
-  local beat_in_bar = ((self.step - 1) % 16) + 1
+  local beat_in_bar = ((self.tick - 1) % 16) + 1
 
   -- style-specific behavior
   local style_fn = self.style_fns[self.style]
@@ -158,7 +158,7 @@ end
 -- 3: AMBIENT — Steampipe resonances, Zen reverb wash
 Bandmate.style_fns[3] = function(self, beat, int)
   -- very slow filter sweeps
-  if beat == 1 and self.step % 16 == 1 then
+  if beat == 1 and self.tick % 16 == 1 then
     local sweep = math.sin(self.bar * 0.15) * 2000 * int
     self:push_fx_param("poli_cutoff", sweep * 0.1)
   end
@@ -188,7 +188,7 @@ end
 Bandmate.style_fns[4] = function(self, beat, int)
   -- bassline filter is THE lever
   if beat % 4 == 1 then
-    local sweep = math.sin(self.step * 0.08) * 800 * int
+    local sweep = math.sin(self.tick * 0.08) * 800 * int
     self:push_voice_param(1, "cutoff", sweep * 0.15)
   end
   -- accent on strong beats
