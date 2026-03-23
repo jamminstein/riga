@@ -590,16 +590,15 @@ function enc(n, d)
   elseif n == 2 then
     if page == 1 then -- THUNDER
       if key3_held then
-        -- select channel
-        sel_ch = util.clamp(sel_ch + d, 1, 4)
-      else
         sel_param = util.clamp(sel_param + d, 1, #THUNDER_PARAMS)
+      else
+        sel_ch = util.clamp(sel_ch + d, 1, 4)
       end
     elseif page == 2 then -- VOICES
       if key3_held then
-        sel_ch = util.clamp(sel_ch + d, 1, 4)
-      else
         sel_param = util.clamp(sel_param + d, 1, #VOICE_PARAMS)
+      else
+        sel_ch = util.clamp(sel_ch + d, 1, 4)
       end
     elseif page == 3 then -- CHAOS
       sel_param = util.clamp(sel_param + d, 1, #CHAOS_PARAMS)
@@ -1143,10 +1142,13 @@ function draw_voices()
     screen.text(FILTER_MODES[v.filterMode + 1])
   end
 
-  -- footer: selected param
+  -- footer: controls hint
   screen.level(8)
   screen.move(0, 63)
-  screen.text("E2:ch E3:" .. VOICE_PARAMS[sel_param])
+  screen.text("E2:voice E3:" .. VOICE_PARAMS[sel_param])
+  screen.level(4)
+  screen.move(128, 63)
+  screen.text_right("K3+E2:param")
 end
 
 function draw_chaos()
