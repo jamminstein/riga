@@ -208,7 +208,7 @@ function init()
     params:set_action("ch" .. ch .. "_cutoff", function(v) voices[ch].cutoff = v end)
 
     params:add_control("ch" .. ch .. "_res", "resonance",
-      controlspec.new(0, 1, 'lin', 0.01, voices[ch].res))
+      controlspec.new(0, 0.75, 'lin', 0.01, voices[ch].res))
     params:set_action("ch" .. ch .. "_res", function(v) voices[ch].res = v end)
 
     params:add_control("ch" .. ch .. "_drive", "drive",
@@ -350,7 +350,7 @@ function init()
   params:set_action("bbd_time", function(v) fx.bbd_time = v; engine.bbd_time(v) end)
 
   params:add_control("bbd_feedback", "delay feedback",
-    controlspec.new(0, 0.95, 'lin', 0.01, fx.bbd_feedback))
+    controlspec.new(0, 0.8, 'lin', 0.01, fx.bbd_feedback))
   params:set_action("bbd_feedback", function(v) fx.bbd_feedback = v; engine.bbd_feedback(v) end)
 
   params:add_control("bbd_color", "delay color",
@@ -367,7 +367,7 @@ function init()
   params:set_action("poli_cutoff", function(v) fx.poli_cutoff = v; engine.poli_cutoff(v) end)
 
   params:add_control("poli_res", "filter res",
-    controlspec.new(0, 1, 'lin', 0.01, fx.poli_res))
+    controlspec.new(0, 0.7, 'lin', 0.01, fx.poli_res))
   params:set_action("poli_res", function(v) fx.poli_res = v; engine.poli_res(v) end)
 
   params:add_option("poli_mode", "filter mode", FILTER_MODES, 1)
@@ -379,11 +379,11 @@ function init()
   params:set_action("plasma_drive", function(v) fx.plasma_drive = v; engine.plasma_drive(v) end)
 
   params:add_control("plasma_fold", "plasma fold",
-    controlspec.new(0, 1, 'lin', 0.01, fx.plasma_fold))
+    controlspec.new(0, 0.5, 'lin', 0.01, fx.plasma_fold))
   params:set_action("plasma_fold", function(v) fx.plasma_fold = v; engine.plasma_fold(v) end)
 
   params:add_control("plasma_mix", "plasma mix",
-    controlspec.new(0, 1, 'lin', 0.01, fx.plasma_mix))
+    controlspec.new(0, 0.6, 'lin', 0.01, fx.plasma_mix))
   params:set_action("plasma_mix", function(v) fx.plasma_mix = v; engine.plasma_mix(v) end)
 
   params:add_separator("ZEN REVERB")
@@ -872,25 +872,25 @@ function key(n, z)
         elseif page == PG_SPACE then
           -- SPACE GESTURE: random FX cocktail — each tap is different
           local cocktails = {
-            function() -- DUB SIREN: max delay feedback + filter sweep
-              fx.bbd_feedback = 0.9; fx.bbd_time = 0.15 + math.random() * 0.3
-              fx.poli_cutoff = 800 + math.random() * 4000; fx.poli_res = 0.6 + math.random() * 0.3
+            function() -- DUB SIREN: delay feedback + filter sweep
+              fx.bbd_feedback = 0.75; fx.bbd_time = 0.15 + math.random() * 0.3
+              fx.poli_cutoff = 800 + math.random() * 4000; fx.poli_res = 0.45 + math.random() * 0.2
               engine.bbd_feedback(fx.bbd_feedback); engine.bbd_time(fx.bbd_time)
               engine.poli_cutoff(fx.poli_cutoff); engine.poli_res(fx.poli_res)
             end,
-            function() -- PLASMA MELTDOWN: max fold + drive
-              fx.plasma_fold = 0.7 + math.random() * 0.3; fx.plasma_drive = 0.6 + math.random() * 0.3
-              fx.plasma_mix = 0.8
+            function() -- PLASMA MELTDOWN: fold + drive (within musical range)
+              fx.plasma_fold = 0.3 + math.random() * 0.2; fx.plasma_drive = 0.4 + math.random() * 0.3
+              fx.plasma_mix = 0.55
               engine.plasma_fold(fx.plasma_fold); engine.plasma_drive(fx.plasma_drive); engine.plasma_mix(fx.plasma_mix)
             end,
-            function() -- CATHEDRAL: massive reverb + delay wash
-              fx.zen_size = 0.95; fx.zen_mix = 0.7; fx.bbd_feedback = 0.85; fx.bbd_mix = 0.6
+            function() -- CATHEDRAL: reverb + delay wash
+              fx.zen_size = 0.9; fx.zen_mix = 0.55; fx.bbd_feedback = 0.7; fx.bbd_mix = 0.5
               engine.zen_size(fx.zen_size); engine.zen_mix(fx.zen_mix)
               engine.bbd_feedback(fx.bbd_feedback); engine.bbd_mix(fx.bbd_mix)
             end,
-            function() -- ACID WASH: polivoks resonance scream + delay
-              fx.poli_cutoff = 200 + math.random() * 1000; fx.poli_res = 0.8
-              fx.bbd_feedback = 0.75; fx.bbd_time = 0.08 + math.random() * 0.15
+            function() -- ACID WASH: polivoks resonance + delay
+              fx.poli_cutoff = 300 + math.random() * 1200; fx.poli_res = 0.55 + math.random() * 0.15
+              fx.bbd_feedback = 0.65; fx.bbd_time = 0.08 + math.random() * 0.15
               engine.poli_cutoff(fx.poli_cutoff); engine.poli_res(fx.poli_res)
               engine.bbd_feedback(fx.bbd_feedback); engine.bbd_time(fx.bbd_time)
             end,
