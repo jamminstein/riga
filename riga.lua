@@ -512,8 +512,13 @@ function step_clock()
         end
       end
 
-      -- advance mixer (rides faders autonomously)
-      mixer:step()
+      -- advance mixer (rides faders on every beat, not just triggers)
+      local mix_changes = mixer:step()
+      if mixer.active and #mix_changes > 0 then
+        for _, mc in ipairs(mix_changes) do
+          engine.voice_param(mc.ch, "amp", voices[mc.ch].amp * mc.level)
+        end
+      end
 
       -- beat pulse for screen
       beat_brightness = 10

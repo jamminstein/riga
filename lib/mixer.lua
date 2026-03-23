@@ -51,18 +51,21 @@ function Mixer:step()
 
   self.tick = self.tick + 1
   local beat = ((self.tick - 1) % 16) + 1
-  if beat == 16 then self.bar = self.bar + 1 end
 
-  -- run strategy to set targets
-  local fn = self.strategy_fns[self.strategy]
-  if fn then fn(self, beat) end
+  -- strategies only decide at bar boundaries (beat 1)
+  if beat == 1 then
+    self.bar = self.bar + 1
+    local fn = self.strategy_fns[self.strategy]
+    if fn then fn(self) end
+  end
 
-  -- slew levels toward targets
+  -- slew levels toward targets (fast: reach target within one bar)
+  -- 0.2 per step * 16 steps = ~96% of distance per bar
   local changes = {}
   for ch = 1, 4 do
     local diff = self.targets[ch] - self.levels[ch]
-    if math.abs(diff) > 0.01 then
-      self.levels[ch] = self.levels[ch] + diff * self.slew
+    if math.abs(diff) > 0.005 then
+      self.levels[ch] = self.levels[ch] + diff * 0.2
       table.insert(changes, {ch = ch, level = self.levels[ch]})
     end
   end
@@ -82,9 +85,7 @@ end
 Mixer.strategy_fns = {}
 
 -- 1: DUB — King Tubby style drops and returns
-Mixer.strategy_fns[1] = function(self, beat)
-  if beat ~= 1 then return end
-
+Mixer.strategy_fns[1] = function(self)
   -- every 2-4 bars: randomly drop or restore a voice
   if self.bar % (2 + math.random(2)) == 0 then
     local ch = math.random(1, 4)
@@ -92,11 +93,11 @@ Mixer.strategy_fns[1] = function(self, beat)
       -- drop it (but bass stays louder)
       local floor = ch == 1 and 0.35 or (0.08 + math.random() * 0.12)
       self.targets[ch] = floor
-      self.slew = 0.15 * self.intensity  -- fast drop
+      -- fast drop
     else
       -- bring it back
       self.targets[ch] = 0.6 + math.random() * 0.4
-      self.slew = 0.06  -- slower return
+      -- slower return via slew
     end
   end
 
@@ -105,14 +106,11 @@ Mixer.strategy_fns[1] = function(self, beat)
     for ch = 1, 4 do
       self.targets[ch] = 0.7 + math.random() * 0.3
     end
-    self.slew = 0.04
   end
 end
 
 -- 2: BUILDER — starts sparse, adds voices over time
-Mixer.strategy_fns[2] = function(self, beat)
-  if beat ~= 1 then return end
-
+Mixer.strategy_fns[2] = function(self)
   -- every 4 bars: add one more voice
   if self.bar % 4 == 0 then
     self.builder_count = math.min(4, self.builder_count + 1)
@@ -134,7 +132,7 @@ Mixer.strategy_fns[2] = function(self, beat)
         self.targets[order[i]] = 0.05 + math.random() * 0.1
       end
     end
-    self.slew = 0.05
+    -- slew handles smooth transition
   end
 
   -- after all 4 are in, reset cycle
@@ -145,14 +143,12 @@ Mixer.strategy_fns[2] = function(self, beat)
       self.targets[ch] = 0.05
     end
     self.targets[math.random(1, 4)] = 0.8
-    self.slew = 0.12 * self.intensity
+    -- dramatic drop
   end
 end
 
 -- 3: CALL — alternates between voice pairs
-Mixer.strategy_fns[3] = function(self, beat)
-  if beat ~= 1 then return end
-
+Mixer.strategy_fns[3] = function(self)
   -- swap pairs every 2-4 bars
   if self.bar % (2 + math.random(2)) == 0 then
     self.call_phase = self.call_phase == 1 and 2 or 1
@@ -170,7 +166,7 @@ Mixer.strategy_fns[3] = function(self, beat)
       self.targets[3] = 0.7 + math.random() * 0.3
       self.targets[4] = 0.6 + math.random() * 0.3
     end
-    self.slew = 0.08 * self.intensity
+    -- crossfade via slew
   end
 
   -- every 8 bars: all together moment
@@ -178,14 +174,12 @@ Mixer.strategy_fns[3] = function(self, beat)
     for ch = 1, 4 do
       self.targets[ch] = 0.65 + math.random() * 0.3
     end
-    self.slew = 0.06
+    -- gentle blend
   end
 end
 
 -- 4: SPOTLIGHT — solos one voice, rotates
-Mixer.strategy_fns[4] = function(self, beat)
-  if beat ~= 1 then return end
-
+Mixer.strategy_fns[4] = function(self)
   -- every 4 bars: rotate spotlight
   if self.bar % 4 == 0 then
     self.spotlight_ch = (self.spotlight_ch % 4) + 1
@@ -198,7 +192,7 @@ Mixer.strategy_fns[4] = function(self, beat)
         self.targets[ch] = 0.1 + math.random() * 0.15 * (1 - self.intensity)
       end
     end
-    self.slew = 0.1 * self.intensity
+    -- spotlight transition
   end
 
   -- every 16 bars: all voices moment
@@ -206,13 +200,13 @@ Mixer.strategy_fns[4] = function(self, beat)
     for ch = 1, 4 do
       self.targets[ch] = 0.7 + math.random() * 0.3
     end
-    self.slew = 0.03
+    -- slow reveal
   end
 end
 
 -- 5: BREATHE — all voices swell together
-Mixer.strategy_fns[5] = function(self, beat)
-  self.breathe_phase = self.breathe_phase + 0.008 * self.intensity
+Mixer.strategy_fns[5] = function(self)
+  self.breathe_phase = self.breathe_phase + 0.12 * self.intensity
 
   local breath = (math.sin(self.breathe_phase) + 1) / 2  -- 0-1
   local base = 0.15 + breath * 0.8
@@ -222,7 +216,6 @@ Mixer.strategy_fns[5] = function(self, beat)
     local offset = math.sin(self.breathe_phase + ch * 0.7) * 0.15
     self.targets[ch] = util.clamp(base + offset, 0.05, 1.0)
   end
-  self.slew = 0.04
 end
 
 return Mixer
