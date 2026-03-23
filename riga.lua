@@ -74,8 +74,8 @@ local fx_blast_active = false  -- FX blast auto-decay
 local active_notes = {{}, {}, {}, {}}
 
 local NOTE_NAMES = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"}
-local DIVISIONS = {1/4, 1/8, 1/16, 1/32}
-local DIV_NAMES = {"1/4", "1/8", "1/16", "1/32"}
+local DIVISIONS = {1, 1/2, 1/4, 1/3, 1/8, 1/6, 1/16, 1/32}
+local DIV_NAMES = {"1", "1/2", "1/4", "1/3", "1/8", "1/6", "1/16", "1/32"}
 local MODE_NAMES = {"BASSLINE", "PERKONS", "STEAMPIPE", "SYNTRX"}
 local SHUFFLE_NAMES = {"OFF", "SWING", "PUSH", "DRUNK"}
 local FILTER_MODES = {"LP", "BP", "HP"}
@@ -188,7 +188,7 @@ function init()
   params:add_number("bpm", "BPM", 20, 300, 120)
   params:set_action("bpm", function(v) params:set("clock_tempo", v) end)
 
-  params:add_option("division", "division", DIV_NAMES, 3)
+  params:add_option("division", "division", DIV_NAMES, 5)
 
   params:add_option("root", "root note", NOTE_NAMES, 1)
   local scale_names = {}
