@@ -38,6 +38,7 @@ local Chaos = include "lib/chaos"
 local Explorer = include "lib/explorer"
 local Bandmate = include "lib/bandmate"
 local Timbre = include "lib/timbre"
+local Mixer = include "lib/mixer"
 
 ----------------------------------------------------------------
 -- state
@@ -48,6 +49,7 @@ local chaos = nil
 local explorer = nil
 local bandmate = nil
 local timbre = nil
+local mixer = nil
 local g = grid.connect()
 local midi_out = nil
 
@@ -158,6 +160,7 @@ function init()
   explorer = Explorer.new(thunder, chaos)
   bandmate = Bandmate.new(thunder, chaos, explorer)
   timbre = Timbre.new()
+  mixer = Mixer.new()
 
   -- apply voice presets
   for ch = 1, 4 do
@@ -314,6 +317,18 @@ function init()
   params:add_control("timbre_intensity", "timbre intensity",
     controlspec.new(0, 1, 'lin', 0.01, 0.5))
   params:set_action("timbre_intensity", function(v) timbre.intensity = v end)
+
+  -- mixer params
+  params:add_separator("MIXER")
+  params:add_option("mixer_active", "mixer", {"off", "on"}, 1)
+  params:set_action("mixer_active", function(v) mixer.active = v == 2 end)
+
+  params:add_option("mixer_strategy", "strategy", Mixer.STRATEGY_NAMES, 1)
+  params:set_action("mixer_strategy", function(v) mixer.strategy = v end)
+
+  params:add_control("mixer_intensity", "mixer intensity",
+    controlspec.new(0, 1, 'lin', 0.01, 0.5))
+  params:set_action("mixer_intensity", function(v) mixer.intensity = v end)
 
   -- chaos params
   params:add_separator("CHAOS")
@@ -497,6 +512,9 @@ function step_clock()
         end
       end
 
+      -- advance mixer (rides faders autonomously)
+      mixer:step()
+
       -- beat pulse for screen
       beat_brightness = 10
 
@@ -579,8 +597,9 @@ function trigger_voice(ch, accent, locks)
   -- trigger engine
   engine.trig(ch, v.mode, freq)
 
-  -- set voice params
-  engine.voice_param(ch, "amp", v.amp)
+  -- set voice params (mixer scales amplitude)
+  local mix_level = mixer.active and mixer:get_levels()[ch] or 1.0
+  engine.voice_param(ch, "amp", v.amp * mix_level)
   engine.voice_param(ch, "pan", v.pan)
   engine.voice_param(ch, "cutoff", mod_cutoff)
   engine.voice_param(ch, "res", v.res)
@@ -1133,6 +1152,7 @@ function redraw()
   if explorer.active then status = status .. " E" end
   if bandmate.active then status = status .. " B" end
   if timbre.active then status = status .. " T" end
+  if mixer.active then status = status .. " M" end
   if chaos.active then status = status .. " C" end
   screen.text_right(status)
 
@@ -1303,8 +1323,17 @@ function draw_voices()
 
     -- filter mode
     screen.level(is_sel and 6 or 2)
-    screen.move(120, y + 8)
+    screen.move(115, y + 8)
     screen.text(FILTER_MODES[v.filterMode + 1])
+
+    -- mixer fader (right edge)
+    if mixer.active then
+      local ml = mixer:get_levels()[ch]
+      local fader_h = math.floor(ml * 8)
+      screen.level(ml > 0.5 and 8 or 3)
+      screen.rect(125, y + 8 - fader_h, 3, fader_h)
+      screen.fill()
+    end
   end
 
   -- footer: controls hint
