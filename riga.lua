@@ -846,20 +846,52 @@ function key(n, z)
           chaos:drift(0.5)
           chaos.smooth_factor = math.random()
         elseif page == PG_SPACE then
-          -- SPACE GESTURE: FX blast (max feedback + reverb, auto-decays)
-          fx.bbd_feedback = 0.88
-          fx.zen_mix = 0.7
-          fx.zen_size = 0.92
-          engine.bbd_feedback(fx.bbd_feedback)
-          engine.zen_mix(fx.zen_mix)
-          engine.zen_size(fx.zen_size)
+          -- SPACE GESTURE: random FX cocktail — each tap is different
+          local cocktails = {
+            function() -- DUB SIREN: max delay feedback + filter sweep
+              fx.bbd_feedback = 0.9; fx.bbd_time = 0.15 + math.random() * 0.3
+              fx.poli_cutoff = 800 + math.random() * 4000; fx.poli_res = 0.6 + math.random() * 0.3
+              engine.bbd_feedback(fx.bbd_feedback); engine.bbd_time(fx.bbd_time)
+              engine.poli_cutoff(fx.poli_cutoff); engine.poli_res(fx.poli_res)
+            end,
+            function() -- PLASMA MELTDOWN: max fold + drive
+              fx.plasma_fold = 0.7 + math.random() * 0.3; fx.plasma_drive = 0.6 + math.random() * 0.3
+              fx.plasma_mix = 0.8
+              engine.plasma_fold(fx.plasma_fold); engine.plasma_drive(fx.plasma_drive); engine.plasma_mix(fx.plasma_mix)
+            end,
+            function() -- CATHEDRAL: massive reverb + delay wash
+              fx.zen_size = 0.95; fx.zen_mix = 0.7; fx.bbd_feedback = 0.85; fx.bbd_mix = 0.6
+              engine.zen_size(fx.zen_size); engine.zen_mix(fx.zen_mix)
+              engine.bbd_feedback(fx.bbd_feedback); engine.bbd_mix(fx.bbd_mix)
+            end,
+            function() -- ACID WASH: polivoks resonance scream + delay
+              fx.poli_cutoff = 200 + math.random() * 1000; fx.poli_res = 0.8
+              fx.bbd_feedback = 0.75; fx.bbd_time = 0.08 + math.random() * 0.15
+              engine.poli_cutoff(fx.poli_cutoff); engine.poli_res(fx.poli_res)
+              engine.bbd_feedback(fx.bbd_feedback); engine.bbd_time(fx.bbd_time)
+            end,
+          }
+          cocktails[math.random(#cocktails)]()
           fx_blast_active = true
         elseif page == PG_BANDMATE then
-          -- BANDMATE GESTURE: force phrase boundary
-          for ch = 1, 4 do
-            thunder:mutate(ch, 0.25)
+          -- BANDMATE GESTURE: style roulette — spin to a random style + mutate everything
+          local old_style = bandmate.style
+          -- pick a DIFFERENT style
+          bandmate.style = math.random(1, #Bandmate.STYLE_NAMES)
+          while bandmate.style == old_style and #Bandmate.STYLE_NAMES > 1 do
+            bandmate.style = math.random(1, #Bandmate.STYLE_NAMES)
           end
-          bandmate.home_state = nil  -- reset form home
+          params:set("bandmate_style", bandmate.style)
+          -- mutate all patterns to match new energy
+          for ch = 1, 4 do
+            thunder:randomize(ch, 0.3 + math.random() * 0.3)
+          end
+          -- randomize voice timbres too
+          for ch = 1, 4 do
+            voices[ch].cutoff = 300 + math.random() * 5000
+            voices[ch].drive = math.random() * 0.6
+          end
+          bandmate.home_state = nil
         end
       end
     else
@@ -1533,7 +1565,7 @@ function draw_space()
   end
   screen.level(4)
   screen.move(128, 63)
-  screen.text_right(fx_blast_active and "BLAST!" or "K3:blast")
+  screen.text_right(fx_blast_active and "BLAST!" or "K3:cocktail")
 end
 
 function draw_bandmate()
@@ -1606,7 +1638,7 @@ function draw_bandmate()
   screen.text("E3:" .. (p or ""))
   screen.level(4)
   screen.move(128, 63)
-  screen.text_right("K3:new phrase")
+  screen.text_right("K3:roulette")
 end
 
 ----------------------------------------------------------------
