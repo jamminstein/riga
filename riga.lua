@@ -396,7 +396,7 @@ function init()
   params:set_action("zen_damp", function(v) fx.zen_damp = v; engine.zen_damp(v) end)
 
   params:add_control("zen_mix", "reverb mix",
-    controlspec.new(0, 1, 'lin', 0.01, fx.zen_mix))
+    controlspec.new(0, 0.5, 'lin', 0.01, fx.zen_mix))
   params:set_action("zen_mix", function(v) fx.zen_mix = v; engine.zen_mix(v) end)
 
   -- MIDI
