@@ -415,7 +415,13 @@ function step_clock()
       -- advance timbre engineer
       local timbre_changes = timbre:step(voices)
       for _, tc in ipairs(timbre_changes) do
-        voices[tc.ch].extra[tc.param] = tc.value
+        if tc.param == "_mode_switch" then
+          -- timbre engineer switched a voice's synthesis mode
+          voices[tc.ch].mode = tc.value
+          params:set("ch" .. tc.ch .. "_mode", tc.value + 1)
+        else
+          voices[tc.ch].extra[tc.param] = tc.value
+        end
       end
 
       -- advance bandmate
@@ -738,11 +744,12 @@ function key(n, z)
   if n == 2 then
     key2_held = z == 1
     if z == 1 then
-      -- K2+K3 combo: toggle bandmate
       if key3_held then
+        -- K2+K3 combo: toggle bandmate (K3 already held, so skip play/stop)
         bandmate.active = not bandmate.active
         params:set("bandmate_active", bandmate.active and 2 or 1)
       else
+        -- solo K2: play/stop
         playing = not playing
         if not playing then
           all_notes_off()
@@ -752,10 +759,9 @@ function key(n, z)
   elseif n == 3 then
     key3_held = z == 1
     if z == 1 then
-      -- K2+K3 combo: toggle bandmate
       if key2_held then
-        bandmate.active = not bandmate.active
-        params:set("bandmate_active", bandmate.active and 2 or 1)
+        -- K3 pressed while K2 already held — this means K2 already toggled play.
+        -- just do nothing here (bandmate toggle only works K3-first then K2)
       else
         -- GESTURE: dramatic one-shot musical event per page
         gesture_active = true

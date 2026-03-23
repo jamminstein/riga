@@ -96,6 +96,11 @@ function Timbre.new()
   -- WEAVER: phase offsets for counterpoint
   self.weave_phase = {0, 0.25, 0.5, 0.75}
 
+  -- mode switching
+  self.mode_switch_enabled = true  -- allow radical mode changes
+  self.mode_switch_interval = 16   -- bars between possible mode switches
+  self.last_mode_switch = 0
+
   -- pending extra param changes (returned to host)
   self.pending = {}
 
@@ -120,6 +125,11 @@ function Timbre:step(voices)
   local fn = self.mindset_fns[self.mindset]
   if fn then
     fn(self, voices, beat)
+  end
+
+  -- mode switching: radical voice mode changes at phrase boundaries
+  if self.mode_switch_enabled and beat == 1 then
+    self:maybe_switch_modes(voices)
   end
 
   return self.pending
@@ -151,6 +161,101 @@ function Timbre:nudge(voices, ch, param_name, delta, mode)
       return new_val
     end
   end
+end
+
+---------- MODE SWITCHING ----------
+
+-- probability of mode switch per mindset (some are more radical)
+local MODE_SWITCH_PROB = {
+  0.02,  -- SCULPTOR: very rare, deliberate
+  0.05,  -- ALCHEMIST: occasional transmutation
+  0.12,  -- PROVOCATEUR: frequent radical changes
+  0.08,  -- ARCHAEOLOGIST: exploring new territories
+  0.04,  -- WEAVER: rare, maintains counterpoint
+  0.15,  -- PYROMANIAC: burns through modes fast
+}
+
+-- when a mode changes, initialize extras to interesting starting points
+-- (not defaults — musically provocative starting positions)
+local MODE_INIT = {
+  [0] = function() -- BASSLINE: random acid/dark/bright character
+    local chars = {
+      {saw=0.9, pulse=0, sub=0.7, noise=0, bbdDetune=0.4, envMod=0.8, pitchEnv=4, pulseWidth=0.5},  -- acid screamer
+      {saw=0, pulse=0.9, sub=0.8, noise=0, bbdDetune=0.1, envMod=0.3, pitchEnv=0, pulseWidth=0.3},   -- dark square
+      {saw=0.5, pulse=0.4, sub=0.3, noise=0.3, bbdDetune=0.6, envMod=0.5, pitchEnv=1, pulseWidth=0.5}, -- detuned wash
+      {saw=0, pulse=0, sub=1.0, noise=0.4, bbdDetune=0, envMod=0.9, pitchEnv=6, pulseWidth=0.5},      -- sub noise
+    }
+    return chars[math.random(#chars)]
+  end,
+  [1] = function() -- PERKONS: random kick/snare/hat/metallic
+    local chars = {
+      {drumMode=0, fmIndex=1.5, fmRatio=1.0, noiseAmt=0.05, shape=0, pitchEnvAmt=8, pitchDecay=0.03},   -- deep kick
+      {drumMode=0.5, fmIndex=0.5, fmRatio=2.0, noiseAmt=0.7, shape=0.3, pitchEnvAmt=2, pitchDecay=0.08}, -- snare crack
+      {drumMode=1.0, fmIndex=3.0, fmRatio=3.5, noiseAmt=0.5, shape=0.8, pitchEnvAmt=0.5, pitchDecay=0.01}, -- metallic hat
+      {drumMode=0.3, fmIndex=4.0, fmRatio=1.414, noiseAmt=0.2, shape=0.5, pitchEnvAmt=4, pitchDecay=0.06}, -- industrial clang
+    }
+    return chars[math.random(#chars)]
+  end,
+  [2] = function() -- STEAMPIPE: random pipe/bell/string/breath
+    local chars = {
+      {exciterNoise=0.3, feedback=0.98, brightness=0.7, splitPoint=0.5, splitMix=0.1, overblow=0, stretch=0},    -- clean pipe
+      {exciterNoise=0.9, feedback=0.95, brightness=0.3, splitPoint=0.3, splitMix=0.7, overblow=0, stretch=0.5},   -- bell
+      {exciterNoise=0.1, feedback=0.99, brightness=0.9, splitPoint=0.5, splitMix=0, overblow=1, stretch=0},       -- overblown flute
+      {exciterNoise=0.8, feedback=0.92, brightness=0.2, splitPoint=0.7, splitMix=0.5, overblow=0, stretch=0.8},   -- inharmonic chime
+    }
+    return chars[math.random(#chars)]
+  end,
+  [3] = function() -- SYNTRX: random chaos/drone/ring/textural
+    local chars = {
+      {osc1Shape=0, osc1Level=0.8, osc2Ratio=2.0, osc2Shape=0, osc2Level=0.3, ringMod=0.5, noiseLevel=0, noiseColor=0.5, chaosAmt=0.1},       -- clean FM
+      {osc1Shape=0.7, osc1Level=0.6, osc2Ratio=1.5, osc2Shape=0.5, osc2Level=0.7, ringMod=0.8, noiseLevel=0.3, noiseColor=0.8, chaosAmt=0.6}, -- ring chaos
+      {osc1Shape=0.3, osc1Level=0.9, osc2Ratio=1.0, osc2Shape=0.3, osc2Level=0.0, ringMod=0, noiseLevel=0.5, noiseColor=0.2, chaosAmt=0.8},   -- noisy drone
+      {osc1Shape=1.0, osc1Level=0.5, osc2Ratio=3.0, osc2Shape=1.0, osc2Level=0.5, ringMod=0.4, noiseLevel=0.1, noiseColor=1.0, chaosAmt=0.4}, -- formant alien
+    }
+    return chars[math.random(#chars)]
+  end,
+}
+
+function Timbre:maybe_switch_modes(voices)
+  if self.bar - self.last_mode_switch < self.mode_switch_interval then return end
+
+  local prob = (MODE_SWITCH_PROB[self.mindset] or 0.05) * self.intensity
+  if math.random() > prob then return end
+
+  -- pick a voice to transform
+  local ch = math.random(1, 4)
+  local old_mode = voices[ch].mode
+
+  -- pick a NEW mode (different from current)
+  local new_mode = old_mode
+  while new_mode == old_mode do
+    new_mode = math.random(0, 3)
+  end
+
+  -- switch mode
+  voices[ch].mode = new_mode
+
+  -- initialize extras for the new mode with a provocative character
+  local init_fn = MODE_INIT[new_mode]
+  if init_fn then
+    local new_extras = init_fn()
+    for k, v in pairs(new_extras) do
+      voices[ch].extra[k] = v
+      self:push(ch, k, v)
+    end
+  end
+
+  -- signal mode change to host
+  table.insert(self.pending, {
+    ch = ch,
+    param = "_mode_switch",
+    value = new_mode,
+  })
+
+  self.last_mode_switch = self.bar
+  -- reset focus for this voice
+  self.focus[ch] = 1
+  self.tension[ch] = 0
 end
 
 ---------- MINDSET ALGORITHMS ----------
