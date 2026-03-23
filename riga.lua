@@ -8,27 +8,27 @@
 -- black code source, black sequencer
 --
 -- 4 voices: BASSLINE / PERKONS / STEAMPIPE / SYNTRX
--- autonomous rhythm, polynomial chaos, phase evolution
--- bandmate: 8 performance styles with breathing + song form
+-- 6 autonomous layers: thunder, chaos, explorer,
+--   bandmate, timbre engineer, robot mod
 --
--- E1: page (thunder/voices/chaos/space/bandmate)
--- E2: select channel or param
+-- E1: page
+-- E2: select voice/channel (K3+E2: select param)
 -- E3: adjust value
 -- K2: play/stop
 -- K3 tap: GESTURE (musical event per page)
---     thunder: all-channel fill burst
---     voices: randomize voices within musical range
---     chaos: rewind + scramble coefficients
---     space: FX blast (feedback+reverb swell, auto-decay)
---     bandmate: force phrase boundary (new pattern)
--- K3 hold + E2: select channel
--- K3 hold + E3: secondary param
--- K2+K3: toggle bandmate
+--     thunder:  regenerate all patterns
+--     voices:   randomize all timbres
+--     timbre:   scramble synthesis params
+--     chaos:    rewind + scramble DNA
+--     space:    FX blast (auto-decays)
+--     bandmate: force phrase boundary
+-- hold K3 + press K2: toggle bandmate
 --
 -- grid top 4 rows: step sequencer (16 x 4)
--- grid row 5-6: voice select + mutes + performance
+-- grid row 5: voice select | mutes | fills | randomize
+-- grid row 6: mode cycle | explorer | chaos
 -- grid row 7: chaos intensity bar
--- grid row 8: play + shuffle + fill + bandmate
+-- grid row 8: play | shuffle | bandmate | fill | form
 
 engine.name = "Riga"
 
@@ -497,6 +497,9 @@ function step_clock()
         end
       end
 
+      -- beat pulse for screen
+      beat_brightness = 10
+
       -- advance thunder and trigger voices
       local results = thunder:advance()
 
@@ -860,8 +863,7 @@ function key(n, z)
         end
       end
     else
-      -- K3 release
-      -- K3 release (no-op now, gestures are one-shot)
+      -- K3 release (gestures are one-shot, no release action needed)
     end
   end
   screen_dirty = true
@@ -1063,50 +1065,65 @@ end
 -- screen
 ----------------------------------------------------------------
 
+-- beat pulse for header animation
+local beat_brightness = 0
+
 function redraw()
   screen.clear()
 
-  -- header
-  screen.level(playing and 15 or 5)
+  -- beat pulse decay
+  if beat_brightness > 0 then beat_brightness = beat_brightness - 2 end
+
+  -- header: RIGA title with beat pulse
+  local title_level = playing and (5 + math.max(0, beat_brightness)) or 3
+  screen.level(math.min(15, title_level))
   screen.move(0, 7)
   screen.text("RIGA")
 
   -- page dots
   for i = 1, NUM_PAGES do
-    screen.level(page == i and 15 or 3)
-    screen.rect(30 + (i - 1) * 6, 2, 4, 4)
+    screen.level(page == i and 15 or 2)
+    screen.rect(28 + (i - 1) * 5, 2, 3, 3)
     screen.fill()
   end
 
-  -- page name + status
-  screen.level(10)
+  -- page name
+  screen.level(12)
   screen.move(60, 7)
   screen.text(PAGE_NAMES[page])
 
-  -- explorer phase indicator
-  if explorer.active then
-    screen.level(7)
-    screen.move(100, 7)
-    screen.text(explorer:get_phase_name())
+  -- right side: active system indicators (compact)
+  local rx = 128
+  screen.level(5)
+  screen.move(rx, 7)
+  local status = params:get("bpm") .. ""
+  -- show active autonomous layers as dots
+  if explorer.active then status = status .. " E" end
+  if bandmate.active then status = status .. " B" end
+  if timbre.active then status = status .. " T" end
+  if chaos.active then status = status .. " C" end
+  screen.text_right(status)
+
+  -- explorer phase (when active, show below header)
+  if explorer.active and playing then
+    local phase_name = explorer:get_phase_name()
+    local progress = explorer:get_phase_progress()
+    -- phase progress bar
+    screen.level(3)
+    screen.rect(0, 8, 128, 1)
+    screen.fill()
+    screen.level(phase_name == "RAGE" and 12 or (phase_name == "STORM" and 8 or 5))
+    screen.rect(0, 8, math.floor(progress * 128), 1)
+    screen.fill()
   end
 
-  -- BPM
-  screen.level(5)
-  screen.move(128, 7)
-  screen.text_right(params:get("bpm") .. "")
-
-  -- gesture flash
+  -- gesture flash (bright border)
   if gesture_active then
     screen.level(15)
     screen.rect(0, 0, 128, 64)
     screen.stroke()
-  end
-
-  -- bandmate indicator in header
-  if bandmate.active then
-    screen.level(bandmate.energy > 0.5 and 10 or 4)
-    screen.move(52, 7)
-    screen.text("~")
+    screen.rect(1, 1, 126, 62)
+    screen.stroke()
   end
 
   -- page content
@@ -1182,20 +1199,28 @@ function draw_thunder()
     end
   end
 
-  -- footer: selected param
+  -- footer
   screen.level(8)
   screen.move(0, 63)
   local p = THUNDER_PARAMS[sel_param]
-  if p == "division" then
-    screen.text("DIV: " .. DIV_NAMES[params:get("division")])
-  elseif p == "shuffle" then
-    screen.text("SHUFFLE: " .. SHUFFLE_NAMES[thunder.shuffle])
-  elseif p == "shuffle_amt" then
-    screen.text("SWING: " .. string.format("%.0f%%", thunder.shuffle_amount * 100))
-  elseif p == "fill_type" then
-    local ft_names = {"EUCLID", "RANDOM", "DOUBLE", "CASCADE"}
-    screen.text("FILL: " .. ft_names[thunder.fill_type])
+  if key3_held then
+    -- show param select hint when K3 held
+    screen.text("K3+E2: " .. (p or ""))
+  else
+    if p == "division" then
+      screen.text("DIV:" .. DIV_NAMES[params:get("division")])
+    elseif p == "shuffle" then
+      screen.text("SHUFFLE:" .. SHUFFLE_NAMES[thunder.shuffle])
+    elseif p == "shuffle_amt" then
+      screen.text("SWING:" .. string.format("%.0f%%", thunder.shuffle_amount * 100))
+    elseif p == "fill_type" then
+      local ft_names = {"EUCLID", "RANDOM", "DOUBLE", "CASCADE"}
+      screen.text("FILL:" .. ft_names[thunder.fill_type])
+    end
   end
+  screen.level(4)
+  screen.move(128, 63)
+  screen.text_right("ch" .. sel_ch .. " K3:regen")
 end
 
 function draw_voices()
@@ -1333,7 +1358,10 @@ function draw_timbre()
   -- footer
   screen.level(8)
   screen.move(0, 63)
-  screen.text("E2:voice K3+E2:param E3:" .. TIMBRE_PARAMS[sel_param])
+  screen.text("E3:" .. TIMBRE_PARAMS[sel_param])
+  screen.level(4)
+  screen.move(128, 63)
+  screen.text_right("ch" .. sel_ch .. " K3:scramble")
 end
 
 function draw_chaos()
@@ -1409,10 +1437,13 @@ function draw_chaos()
     screen.text_right(val_str)
   end
 
-  -- footer: K3 gesture hint
-  screen.level(4)
+  -- footer
+  screen.level(8)
   screen.move(0, 63)
-  screen.text("K3:rewind+scramble")
+  screen.text("E3:" .. (CHAOS_LABELS[sel_param] or ""))
+  screen.level(4)
+  screen.move(128, 63)
+  screen.text_right("K3:rewind")
 end
 
 function draw_space()
@@ -1497,8 +1528,12 @@ function draw_space()
     else
       display = string.format("%.0f%%", val * 100)
     end
-    screen.text(sp:gsub("_"," ") .. ": " .. display)
+    local short = sp:gsub("bbd_","B:"):gsub("poli_","P:"):gsub("plasma_","D:"):gsub("zen_","Z:")
+    screen.text(short .. " " .. display)
   end
+  screen.level(4)
+  screen.move(128, 63)
+  screen.text_right(fx_blast_active and "BLAST!" or "K3:blast")
 end
 
 function draw_bandmate()
@@ -1571,7 +1606,7 @@ function draw_bandmate()
   screen.text("E3:" .. (p or ""))
   screen.level(4)
   screen.move(128, 63)
-  screen.text_right("K2+K3:toggle")
+  screen.text_right("K3:new phrase")
 end
 
 ----------------------------------------------------------------
