@@ -388,7 +388,7 @@ function init()
 
   params:add_separator("ZEN REVERB")
   params:add_control("zen_size", "reverb size",
-    controlspec.new(0, 1, 'lin', 0.01, fx.zen_size))
+    controlspec.new(0, 0.8, 'lin', 0.01, fx.zen_size))
   params:set_action("zen_size", function(v) fx.zen_size = v; engine.zen_size(v) end)
 
   params:add_control("zen_damp", "reverb damp",
