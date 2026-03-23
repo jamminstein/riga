@@ -188,7 +188,7 @@ function init()
   params:add_number("bpm", "BPM", 20, 300, 120)
   params:set_action("bpm", function(v) params:set("clock_tempo", v) end)
 
-  params:add_option("division", "division", DIV_NAMES, 5)
+  params:add_option("division", "division", DIV_NAMES, 3)
 
   params:add_option("root", "root note", NOTE_NAMES, 1)
   local scale_names = {}
