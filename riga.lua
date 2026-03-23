@@ -403,23 +403,28 @@ function init()
     params:add_number("opxy_ch_" .. ch, "ch " .. ch .. " op-xy ch", 1, 16, ch + 4)
   end
 
-  -- init FX
-  engine.bbd_time(fx.bbd_time)
-  engine.bbd_feedback(fx.bbd_feedback)
-  engine.bbd_color(fx.bbd_color)
-  engine.bbd_mix(fx.bbd_mix)
-  engine.bbd_rate(fx.bbd_rate)
-  engine.poli_cutoff(fx.poli_cutoff)
-  engine.poli_res(fx.poli_res)
-  engine.poli_mode(fx.poli_mode)
-  engine.poli_env(fx.poli_env)
-  engine.plasma_drive(fx.plasma_drive)
-  engine.plasma_fold(fx.plasma_fold)
-  engine.plasma_mix(fx.plasma_mix)
-  engine.zen_size(fx.zen_size)
-  engine.zen_damp(fx.zen_damp)
-  engine.zen_mix(fx.zen_mix)
-  engine.zen_predelay(fx.zen_predelay)
+  -- defer engine init + clock start until engine is ready
+  clock.run(function()
+    clock.sleep(0.5)  -- wait for SC engine to load
+
+    -- init FX
+    engine.bbd_time(fx.bbd_time)
+    engine.bbd_feedback(fx.bbd_feedback)
+    engine.bbd_color(fx.bbd_color)
+    engine.bbd_mix(fx.bbd_mix)
+    engine.bbd_rate(fx.bbd_rate)
+    engine.poli_cutoff(fx.poli_cutoff)
+    engine.poli_res(fx.poli_res)
+    engine.poli_mode(fx.poli_mode)
+    engine.poli_env(fx.poli_env)
+    engine.plasma_drive(fx.plasma_drive)
+    engine.plasma_fold(fx.plasma_fold)
+    engine.plasma_mix(fx.plasma_mix)
+    engine.zen_size(fx.zen_size)
+    engine.zen_damp(fx.zen_damp)
+    engine.zen_mix(fx.zen_mix)
+    engine.zen_predelay(fx.zen_predelay)
+  end)
 
   -- start clock
   clock.run(step_clock)
